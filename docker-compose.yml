@@ -1,0 +1,17 @@
+version: "3"
+services:
+  oracle-xe:
+    image: gvenzl/oracle-xe:21
+    container_name: oracle-xe
+    ports:
+      - "1521:1521"
+    environment:
+      ORACLE_PASSWORD: MiPasswordSegura123
+      APP_USER: myuser
+      APP_USER_PASSWORD: MiPasswordUsuario123
+    volumes:
+      - oracle-xe-data:/opt/oracle/oradata
+    restart: unless-stopped
+
+volumes:
+  oracle-xe-data:
