@@ -12,7 +12,11 @@ function ConnectionModal({ open, onClose, onConnect }) {
       setLoading(true);
       const result = await onConnect(values);
       setLoading(false);
-      if(result) onClose();
+      if(result) {
+        form.resetFields();
+        setError(false);
+        onClose();
+      }
       else setError(true);
     } catch (error) {
       setLoading(false);
@@ -24,9 +28,17 @@ function ConnectionModal({ open, onClose, onConnect }) {
     <Modal
       open={open}
       title="Conectar a OracleDB"
-      onCancel={onClose}
+      onCancel={() => {
+        form.resetFields();
+        setError(false);
+        onClose();
+      }}
       footer={[
-        <Button key="cancel" onClick={onClose}>
+        <Button key="cancel" onClick={()=>{
+          form.resetFields();
+          setError(false);
+          onClose();
+        }}>
           Cancelar
         </Button>,
         <Button key="connect" type="primary" loading={loading} onClick={handleConnect}>
