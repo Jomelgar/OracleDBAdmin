@@ -1,7 +1,8 @@
 import { Button, Layout, Tree, Typography, Divider} from 'antd';
 import Cookies from "js-cookie";
 import {
-  PlusCircleOutlined
+  PlusCircleOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
 import { getTree } from '../api/getTree';
 import { useEffect, useState } from 'react';
@@ -137,19 +138,26 @@ function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
   };
 
   return (
-    <div>
+    <div className="h-full overflow-y-auto">
       <Sider
         width={siderWidth}
         className="bg-white border-r border-gray-300 shadow-md p-4 overflow-y-auto relative"
         style={{ height: '100vh' }}
       >
-        <Title level={5} className="text-gray-700 mb-4">Conexiones</Title>
+        <Title level={5} className="text-gray-700 mb-4">Connections</Title>
         <Button
           className='mt-2 bg-red-800 text-white border-red-800 hover:!border-red-400 hover:!text-red-400'
           icon={<PlusCircleOutlined />}
           onClick={() => setConnectModal(true)}
         >
-          Nueva Conexión
+          New
+        </Button>
+        <Button
+          className='mt-2 ml-2 bg-red-800 text-white border-red-800 hover:!border-red-400 hover:!text-red-400'
+          icon={<ReloadOutlined />}
+          onClick={async() => await fetchTree()}
+        >
+          Refresh
         </Button>
         <Divider className='border-gray-300 w-full'/>
         <Tree

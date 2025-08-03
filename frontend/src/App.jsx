@@ -16,7 +16,7 @@ function App() {
           OracleDBAdmin
         </text>
       </header>
-      <div className="h-screen w-screen flex bg-gray-100">
+      <div className="w-screen flex bg-gray-100">
         <Sidebar 
           setActiveKey={setActiveKey} setTabs={setTabs} setNewTabIndex={setNewTabIndex}
           activeKey={activeKey} tabs={tabs} newTabIndex={newTabIndex}
