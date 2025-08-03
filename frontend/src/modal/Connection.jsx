@@ -3,15 +3,17 @@ import { useState } from 'react';
 
 function ConnectionModal({ open, onClose, onConnect }) {
   const [form] = Form.useForm();
+  const [error,setError] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleConnect = async () => {
     try {
       const values = await form.validateFields();
       setLoading(true);
-      await onConnect(values);
+      const result = await onConnect(values);
       setLoading(false);
-      onClose();
+      if(result) onClose();
+      else setError(true);
     } catch (error) {
       setLoading(false);
       console.error('Error en validación o conexión', error);
@@ -72,6 +74,11 @@ function ConnectionModal({ open, onClose, onConnect }) {
           <Input placeholder="Ej: XEPDB1" />
         </Form.Item>
       </Form>
+      {error && (
+        <text className='text-red-500 text-center'>
+          No se aceptaron esas credenciales para conectarse a una base de datos de Oracle.
+        </text>
+      )}
     </Modal>
   );
 }

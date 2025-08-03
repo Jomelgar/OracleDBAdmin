@@ -62,7 +62,7 @@ exports.runQuery = async (req, res) => {
       connectString: `${host}/${service}`,
     });
 
-    const result = await connection.execute(query);
+    const result = await connection.execute(query,[],{ autoCommit: true });
     await connection.close();
     res.status(200).json(result);
   } catch (err) {

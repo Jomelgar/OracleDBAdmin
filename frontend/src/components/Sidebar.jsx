@@ -42,7 +42,7 @@ function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
   }, [siderWidth]);
 
   useEffect(() => {
-    Cookies.remove('oracleConnections');
+    //Cookies.remove('oracleConnections');
     const handleMouseMove = (e) => {
       if (isResizing) {
         const newWidth = Math.min(Math.max(e.clientX, 250), 600); // entre 250 y 600 px
@@ -97,9 +97,11 @@ function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
         }
 
         await fetchTree();
+        return true;
       }
     } catch (err) {
       console.error("Error al conectar", err);
+      return false;
     }
   };
 
@@ -110,7 +112,6 @@ function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
   };
 
   const onSelect = async (selectedKey) => {
-    console.log(selectedKey);
     if (selectedKey.includes('_table_') || selectedKey.includes('_view_')) {
       const [host, user, owner, , table] = selectedKey.split('_');
       const conn = JSON.parse(Cookies.get("oracleConnections")).find(c => c.host === host && c.user === user);

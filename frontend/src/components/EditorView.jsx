@@ -33,17 +33,28 @@ function EditorView({ content = "", onChange }) {
   const runCode = async () => {
     try {
       console.log(selectedConnection);
-      const result = await axiosInstance.post('/query', {
-        host: selectedConnection.host,
-        user: selectedConnection.user,
-        password: selectedConnection.password,
-        service: selectedConnection.service,
-        query: text,
-      });
-      setOutput(<OutputTable data={result?.data || []} meta={result.data?.metaData}/>);
+      const queries = text.split(';').map(q => q.trim()).filter(q => q !== '');
+      let finalResult = null;
+      for (const query of queries) {
+        const response = await axiosInstance.post('/query', {
+          host: selectedConnection.host,
+          user: selectedConnection.user,
+          password: selectedConnection.password,
+          service: selectedConnection.service,
+          query: query,
+        });
+        finalResult = response;
+      }
+      if (finalResult?.data) {
+        setOutput(
+          <OutputTable data={finalResult.data || []} meta={finalResult.data?.metaData} />
+        );
+      } else {
+        console.log(finalResult)
+        setOutput("✅ Consulta(s) ejecutada(s) sin errores, pero sin datos de salida.");
+      }
     } catch (err) {
       let errorMsg = "❌ Error:\n";
-
       if (err.response && err.response.data) {
         errorMsg += JSON.stringify(err.response.data.error, null, 2);
       } else if (err.message) {
@@ -51,10 +62,10 @@ function EditorView({ content = "", onChange }) {
       } else {
         errorMsg += err.toString();
       }
-
       setOutput(errorMsg);
     }
   };
+
 
 
   const lineNumbers = Array.from({ length: lines }, (_, i) => i + 1);
