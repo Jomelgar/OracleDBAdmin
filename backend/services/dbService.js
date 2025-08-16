@@ -156,6 +156,27 @@ exports.getDataTypes =async(req,res)=>{
     ORDER BY type_name`);
     res.status(200).json(result);
   } catch (error) {
-    res.status(200).json({error: error.message})
+    res.status(500).json({error: error.message})
+  }
+};
+
+exports.getBody= async(req,res)=>{
+  const {owner,name} = req.params;
+  const { user, password, host, service } = req.query;
+  try
+  {
+    const connection = await oracledb.getConnection({
+      user,
+      password,
+      connectString: `${host}/${service}`,
+    });
+
+    const result = await connection.execute(`SELECT LISTAGG(text,'') WITHIN GROUP(ORDER BY line)
+      FROM all_source WHERE name='${name}' AND owner = '${owner}'`);
+    console.log(result);
+    res.status(200).json(result);
+  }catch(error)
+  {
+    res.status(500).json({error: error.message});
   }
 };

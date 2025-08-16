@@ -5,7 +5,7 @@ import axiosInstance from '../utils/axiosInstance';
 import { ExportOutlined, ImportOutlined, PlayCircleOutlined,InboxOutlined} from "@ant-design/icons";
 import OutputTable from './OutputTable';
 
-function EditorView({ content = "", onChange }) {
+function EditorView({ content = "", onChange, isEditable = true }) {
   const [api, contextHolder] = message.useMessage();
   const [text, setText] = useState(content);
   const [lines, setLines] = useState(1);
@@ -128,38 +128,53 @@ function EditorView({ content = "", onChange }) {
 
         {/* Selector de conexión y botones */}
         <div className="flex items-center justify-between px-5 py-2 border-b bg-gray-50">
-          <Select
-            className="min-w-[250px]"
-            placeholder="Select Connection"
-            value={selectedConnection ? selectedConnection.host + '/' +
-              selectedConnection.service + '-' + selectedConnection.user : undefined}
-            onChange={(key) => {
-              const selected = connections.find(item => 
-                item.host + '/' + item.service + '-' + item.user === key);
-              setSelectedConnection(selected);
-            }}
-          >
-            {connections.map((item) => (
-              <Select.Option
-                key={item.host + '/' + item.service + '-' + item.user}
-                value={item.host + '/' + item.service + '-' + item.user}
-              >
-                {item.host}/{item.service} - {item.user}
-              </Select.Option>
-            ))}
-          </Select>
+          {isEditable && 
+            <Select
+              className="min-w-[250px]"
+              placeholder="Select Connection"
+              value={selectedConnection ? selectedConnection.host + '/' +
+                selectedConnection.service + '-' + selectedConnection.user : undefined}
+              onChange={(key) => {
+                const selected = connections.find(item => 
+                  item.host + '/' + item.service + '-' + item.user === key);
+                setSelectedConnection(selected);
+              }}
+            >
+              {connections.map((item) => (
+                <Select.Option
+                  key={item.host + '/' + item.service + '-' + item.user}
+                  value={item.host + '/' + item.service + '-' + item.user}
+                >
+                  {item.host}/{item.service} - {item.user}
+                </Select.Option>
+              ))}
+            </Select>
+          }
           
           {/*Botones*/}
           <div className="flex items-center gap-x-4">
-            <Button
-              type="primary"
-              icon={<PlayCircleOutlined />}
-              onClick={runCode}
-              size="middle"
-              className="bg-red-700 hover:!bg-white hover:!text-red-500 hover:!border-red-500"
-            >
-              Execute
-            </Button>
+            {isEditable &&
+            <>
+              <Button
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                onClick={runCode}
+                size="middle"
+                className="bg-red-700 hover:!bg-white hover:!text-red-500 hover:!border-red-500"
+              >
+                Execute
+              </Button>
+              <Button
+                type="primary"
+                icon={<ImportOutlined />}
+                size="middle"
+                onClick={handleImport}
+                className="bg-red-700 hover:!bg-white hover:!text-red-500 hover:!border-red-500"
+              >
+                Import
+              </Button>
+            </>
+            }
             <Button
               type="primary"
               icon={<ExportOutlined />}
@@ -168,15 +183,6 @@ function EditorView({ content = "", onChange }) {
               className="bg-red-700 hover:!bg-white hover:!text-red-500 hover:!border-red-500"
             >
               Export
-            </Button>
-            <Button
-              type="primary"
-              icon={<ImportOutlined />}
-              size="middle"
-              onClick={handleImport}
-              className="bg-red-700 hover:!bg-white hover:!text-red-500 hover:!border-red-500"
-            >
-              Import
             </Button>
           </div>
         </div>
@@ -207,11 +213,14 @@ function EditorView({ content = "", onChange }) {
           <Input.TextArea
             ref={textareaRef}
             value={text}
+            disabled={!isEditable}
             onChange={handleChange}
             onScroll={handleScroll}
             autoSize={{ minRows: 10 }}
             placeholder="Escribe tu código SQL aquí..."
-            className="font-mono text-gray-800 text-sm p-3 resize-none flex-1 border-none outline-none bg-white"
+            className={`font-mono  text-sm p-3 resize-none flex-1 border-none outline-none bg-white
+              ${!isEditable? "!text-gray-800": "!text-gray-800"}
+              `}
             style={{
               lineHeight: `${lineHeight}px`,
               height: "auto",
@@ -219,9 +228,11 @@ function EditorView({ content = "", onChange }) {
           />
         </div>
         {/* Salida */}
-        <div className="border-t bg-gray-100 text-gray-800 font-mono text-sm p-4 overflow-auto min-h-[100px]">
-          {output || "📝 Here will appear the output..."}
-        </div>
+        {isEditable &&
+          <div className="border-t bg-gray-100 text-gray-800 font-mono text-sm p-4 overflow-auto min-h-[100px]">
+            {output || "📝 Here will appear the output..."}
+          </div>
+        }
       </div>
       {/* Modal para importar archivo */}
         <Modal

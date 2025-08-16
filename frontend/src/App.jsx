@@ -3,8 +3,7 @@ import Sidebar from './components/Sidebar';
 import TabPanel from './components/TabPanel';
 
 function App() {
-  const [tabs, setTabs] = useState([
-  ]);
+  const [tabs, setTabs] = useState([]);
   const [activeKey, setActiveKey] = useState("1");
   const [newTabIndex, setNewTabIndex] = useState(2);
   

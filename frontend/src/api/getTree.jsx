@@ -34,6 +34,7 @@ export async function getTree(connections, setCreateModal,setDropTable) {
         title: ownerObj.owner,
         key: `owner_${conn.host}_${conn.user}_${ownerObj.owner}`,
         icon: <FolderOutlined className="text-red-800" />,
+        type:'owner',
         children: [
           {
             title: (
@@ -67,62 +68,76 @@ export async function getTree(connections, setCreateModal,setDropTable) {
             ),
             key: `owner_${conn.host}_${conn.user}_${ownerObj.owner}_tables`,
             icon: <TableOutlined className="text-red-800" />,
+            type:'tables',
             children: ownerObj.tables.map((tbl) => ({
               title: tbl,
+              type:'table',
               key: `${conn.host}_${conn.user}_${ownerObj.owner}_table_${tbl}`,
             })),
           },
           {
             title: 'Views',
+            type:'views',
             key: `owner_${conn.host}_${conn.user}_${ownerObj.owner}_views`,
             icon: <EyeOutlined className="text-red-800"/>,
             children: ownerObj.views.map((vw) => ({
               title: vw,
+              type:'view',
               key: `${conn.host}_${conn.user}_${ownerObj.owner}_view_${vw}`,
             })),
           },
           {
             title: 'Indexes',
+            type:'indexes',
             key: `owner_${conn.host}_${conn.user}_${ownerObj.owner}_indexes`,
             icon: <InfoOutlined className="text-red-800"/>,
             children: ownerObj.indexes.map((index)=>({
               title: index,
+              type:'index',
               key: `${conn.host}_${conn.user}_${ownerObj.owner}_index_${index}`,
             }))
           },
           {
             title: 'Triggers',
+            type:'triggers',
             key:`owner_${conn.host}_${conn.user}_${ownerObj.owner}_triggers`,
             icon:<AimOutlined className="text-red-800"/>,
             children: ownerObj.triggers.map((trigger)=>({
               title: trigger,
+              type:'trigger',
               key: `${conn.host}_${conn.user}_${ownerObj.owner}_trigger_${trigger}`,
             }))
           },
           {
             title: 'Packages',
+            type:'packages',
             key:`owner_${conn.host}_${conn.user}_${ownerObj.owner}_packages`,
             icon: <BookOutlined className="text-red-800"/>,
             children: ownerObj.packages.map((pack)=>({
               title: pack,
+              type:'package',
               key: `${conn.host}_${conn.user}_${ownerObj.owner}_package_${pack}`,
             }))
           },
           {
             title: 'Procedures',
+            type:'procedures',
             key:`owner_${conn.host}_${conn.user}_${ownerObj.owner}_procedures`,
             icon: <CodeOutlined className="text-red-800"/>,
             children: ownerObj.procedures.map((p)=>({
               title: p,
+              type:'procedure',
               key: `${conn.host}_${conn.user}_${ownerObj.owner}_procedure_${p}`,
             }))
           },
           {
             title: 'Functions',
+            type:'functions',
             key:`owner_${conn.host}_${conn.user}_${ownerObj.owner}_functions`,
             icon: <CodeOutlined className="text-red-800"/>,
             children: ownerObj.functions.map((p)=>({
               title: p,
+              type:'function',
               key: `${conn.host}_${conn.user}_${ownerObj.owner}_package_${p}`,
             }))
           }

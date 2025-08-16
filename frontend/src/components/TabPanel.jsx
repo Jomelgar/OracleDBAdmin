@@ -56,10 +56,10 @@ function TabPanel({setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
       {tabs.map((tab) => (
         <TabPane tab={tab.title} key={tab.id} >
           <div className="p-4">
-            {tab.type === "table" ? (
+            {tab.type === "table" || tab.type==='view'? (
               <OutputTable meta={tab.meta} data={tab.content || []} />
             ) : (
-              <EditorView />
+              tab.type === "editor" ? (<EditorView/>):(<EditorView isEditable={false} content={tab.content}/>)
             )}
           </div>
         </TabPane>

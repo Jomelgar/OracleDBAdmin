@@ -142,30 +142,132 @@ const handleCreate = async (conn, query) => {
     setNewTabIndex((idx) => idx + 1);
   };
 
-  const onSelect = async (selectedKey) => {
-    if (selectedKey.includes('_table_') || selectedKey.includes('_view_')) {
-      const [host, user, owner, , table] = selectedKey.split('_');
-      const conn = JSON.parse(Cookies.get("oracleConnections")).find(c => c.host === host && c.user === user);
-      let content = `Tabla: ${table}`;
-      let meta = 'Col 1';
-      try {
-        const res = await axiosInstance.get(`/table/${owner}/${table}`, {
-          params: {
-            user: conn.user,
-            password: conn.password,
-            host: conn.host,
-            service: conn.service,
-          }
-        });
-        content = (res.data || []);
-        meta = (res.data.metaData || []);
-      } catch (e) {
-        content = "Error cargando datos de tabla";
+  const openBody = async(node,selectedKeys)=>{
+    const key = node.key;
+    try {
+      const parts = key.split("_");
+      const host = parts[0];
+      const user = parts[1];
+      const owner = parts[2];
+      const type = parts[3].replace(/s$/, "");
+      const name = parts.slice(4).join("_");
+      const conn = JSON.parse(Cookies.get("oracleConnections") || "[]")
+        .find(c => c.host === host && c.user === user);
+
+      if (!conn) {
+        console.error("Conexión no encontrada:", host, user);
+        return;
       }
-      setTabs(prev => [...prev, { id: String(newTabIndex), title: table, type: 'table', content, meta }]);
-      addTableTab(table);
+
+      const res = await axiosInstance.get(`/body/${owner}/${name}`, {
+        params: {
+          user: conn.user,
+          password: conn.password,
+          host: conn.host,
+          service: conn.service,
+        }
+      });
+
+      setTabs(prev => {
+        if (prev.some(tab => tab.title === name && tab.type === type)) {
+          return prev;
+        }
+        return [...prev, { 
+          id: String(newTabIndex), 
+          title: name, 
+          type, 
+          content: res.data.rows[0][0] || [], 
+          meta: res.data?.metaData || [] 
+        }];
+      });
+
+      addTableTab(name);
+    } catch (error) {
+      console.error("Error cargando datos:", error);
+
+      setTabs(prev =>
+        prev.map(tab =>
+          tab.title === info.node.title
+            ? { ...tab, content: "Error cargando datos de tabla", meta: [] }
+            : tab
+        )
+      );
     }
   };
+
+  const openTable= async(node,selectedKeys)=>{
+    const key = node.key;
+
+    try {
+      const parts = key.split("_");
+      const host = parts[0];
+      const user = parts[1];
+      const owner = parts[2];
+      const type = parts[3].replace(/s$/, "");
+      const name = parts.slice(4).join("_");
+      const conn = JSON.parse(Cookies.get("oracleConnections") || "[]")
+        .find(c => c.host === host && c.user === user);
+
+      if (!conn) {
+        console.error("Conexión no encontrada:", host, user);
+        return;
+      }
+      const res = await axiosInstance.get(`/table/${owner}/${name}`, {
+        params: {
+          user: conn.user,
+          password: conn.password,
+          host: conn.host,
+          service: conn.service,
+        }
+      });
+      setTabs(prev => {
+        if (prev.some(tab => tab.title === name && tab.type === type)) {
+          return prev;
+        }
+        return [...prev, { 
+          id: String(newTabIndex), 
+          title: name, 
+          type, 
+          content: res.data || [], 
+          meta: res.data?.metaData || [] 
+        }];
+      });
+
+      addTableTab(name);
+    } catch (error) {
+      console.error("Error cargando datos:", error);
+
+      setTabs(prev =>
+        prev.map(tab =>
+          tab.title === info.node.title
+            ? { ...tab, content: "Error cargando datos de tabla", meta: [] }
+            : tab
+        )
+      );
+    }
+  }
+
+  const onSelect = async (selectedKeys, info) => {
+  
+    const node = info.node;
+
+    switch (node.type) {
+      case "table":
+      case "view":
+        await openTable(node,selectedKeys);
+        break;
+      case "trigger":
+      case "procedure":
+      case "function":
+        openBody(node,selectedKeys);
+        break;
+      case "package":
+        break;
+      default:
+        break;
+    }
+  };
+
 
   return (
     <div className="h-full overflow-y-auto">
@@ -194,7 +296,7 @@ const handleCreate = async (conn, query) => {
           showIcon
           defaultExpandAll
           treeData={treeData}
-          onSelect={(key) => onSelect(key[0])}
+          onSelect={(key,info) => onSelect(key[0],info)}
           className="custom-tree w-full"
         />
 
