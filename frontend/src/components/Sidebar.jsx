@@ -176,7 +176,7 @@ const handleCreate = async (conn, query) => {
           id: String(newTabIndex), 
           title: name, 
           type, 
-          content: res.data.rows[0][0] || [], 
+          content: res.data?.rows[0][0] || 'NULL', 
           meta: res.data?.metaData || [] 
         }];
       });
