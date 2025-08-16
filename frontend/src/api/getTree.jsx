@@ -1,4 +1,5 @@
 import axiosInstance from "../utils/axiosInstance";
+import {Dropdown,Button} from 'antd';
 import {
   DatabaseOutlined,
   TableOutlined,
@@ -9,14 +10,14 @@ import {
   AimOutlined,
   BoxPlotOutlined,
   BookOutlined,
+  MoreOutlined,
   CodeOutlined,
 } from '@ant-design/icons';
 
-export async function getTree(connections) {
+export async function getTree(connections, setCreateModal,setDropTable) {
   try {
     const allConnectionsNodes = [];
 
-    // Itera todas las conexiones
     for (const conn of connections) {
       const res = await axiosInstance.get('/tree', {
         params: {
@@ -29,16 +30,43 @@ export async function getTree(connections) {
 
       const data = res.data;
 
-      // Construye el nodo para esta conexión
       const childrenOwners = data.map((ownerObj) => ({
         title: ownerObj.owner,
         key: `owner_${conn.host}_${conn.user}_${ownerObj.owner}`,
-        icon: <FolderOutlined className="text-red-800"/>,
+        icon: <FolderOutlined className="text-red-800" />,
         children: [
           {
-            title: 'Tables',
+            title: (
+              <span className="flex justify-between w-full items-center">
+                Tables
+                <Dropdown
+                  menu={{
+                    items: [
+                      {
+                        key: 'create_table',
+                        label: 'Crear tabla',
+                        onClick: () => setCreateModal(conn, ownerObj.owner),
+                      },
+                      {
+                        key: 'drop_table',
+                        label: 'Eliminar tabla',
+                        onClick: () => setDropTable(true),
+                      },
+                    ],
+                  }}
+                  trigger={['click']}
+                >
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<MoreOutlined />}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </Dropdown>
+              </span>
+            ),
             key: `owner_${conn.host}_${conn.user}_${ownerObj.owner}_tables`,
-            icon: <TableOutlined className="text-red-800"/>,
+            icon: <TableOutlined className="text-red-800" />,
             children: ownerObj.tables.map((tbl) => ({
               title: tbl,
               key: `${conn.host}_${conn.user}_${ownerObj.owner}_table_${tbl}`,
@@ -66,21 +94,37 @@ export async function getTree(connections) {
             title: 'Triggers',
             key:`owner_${conn.host}_${conn.user}_${ownerObj.owner}_triggers`,
             icon:<AimOutlined className="text-red-800"/>,
+            children: ownerObj.triggers.map((trigger)=>({
+              title: trigger,
+              key: `${conn.host}_${conn.user}_${ownerObj.owner}_trigger_${trigger}`,
+            }))
           },
           {
             title: 'Packages',
             key:`owner_${conn.host}_${conn.user}_${ownerObj.owner}_packages`,
             icon: <BookOutlined className="text-red-800"/>,
+            children: ownerObj.packages.map((pack)=>({
+              title: pack,
+              key: `${conn.host}_${conn.user}_${ownerObj.owner}_package_${pack}`,
+            }))
           },
           {
             title: 'Procedures',
             key:`owner_${conn.host}_${conn.user}_${ownerObj.owner}_procedures`,
-            icon: <CodeOutlined className="text-red-800"/>
+            icon: <CodeOutlined className="text-red-800"/>,
+            children: ownerObj.procedures.map((p)=>({
+              title: p,
+              key: `${conn.host}_${conn.user}_${ownerObj.owner}_procedure_${p}`,
+            }))
           },
           {
             title: 'Functions',
             key:`owner_${conn.host}_${conn.user}_${ownerObj.owner}_functions`,
-            icon: <CodeOutlined className="text-red-800"/>
+            icon: <CodeOutlined className="text-red-800"/>,
+            children: ownerObj.functions.map((p)=>({
+              title: p,
+              key: `${conn.host}_${conn.user}_${ownerObj.owner}_package_${p}`,
+            }))
           }
         ],
       }));

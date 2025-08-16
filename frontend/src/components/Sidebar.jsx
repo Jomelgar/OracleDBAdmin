@@ -1,4 +1,4 @@
-import { Button, Layout, Tree, Typography, Divider} from 'antd';
+import { Button, Layout, Tree, Typography, Divider,message} from 'antd';
 import Cookies from "js-cookie";
 import {
   PlusCircleOutlined,
@@ -7,6 +7,7 @@ import {
 import { getTree } from '../api/getTree';
 import { useEffect, useState } from 'react';
 import ConnectionModal from '../modal/Connection';
+import CreateTable from '../modal/CreateTable';
 import axiosInstance from '../utils/axiosInstance';
 
 const { Sider } = Layout;
@@ -15,8 +16,37 @@ const { Title } = Typography;
 function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, setTabs }) {
   const [treeData, setTreeData] = useState([]);
   const [connectModal, setConnectModal] = useState(false);
+  const [createModal,setCreateModal] = useState(false);
+  const [dropModal, setDropModal] = useState(false);
   const [siderWidth, setSiderWidth] = useState(400); // valor inicial
   const [isResizing, setIsResizing] = useState(false);
+  const [connection, setConnection] = useState(false);
+  const [owner,setOwner] = useState(false);
+
+  const selectAddTable= (connection,owner)=>{
+    setConnection(connection);
+    setOwner(owner);
+    setCreateModal(true);
+  }
+
+const handleCreate = async (conn, query) => {
+  try {
+    console.log(query);
+    const res = await axiosInstance.post('/query', {
+      host: conn.host,
+      user: conn.user,
+      password: conn.password,
+      service: conn.service,
+      query: query,
+    });
+
+    message.success('Tabla creada correctamente');
+    await fetchTree();
+  } catch (error) {
+    message.error('Error al crear tabla: ' + (error.response?.data?.error || error.message));
+  }
+};
+
 
   const fetchTree = async () => {
     const connectionsString = Cookies.get("oracleConnections");
@@ -28,7 +58,7 @@ function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
         connections = [];
       }
     }
-    const data = await getTree(connections);
+    const data = await getTree(connections,selectAddTable,setDropModal);
     setTreeData(data);
   };
 
@@ -165,7 +195,7 @@ function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
           defaultExpandAll
           treeData={treeData}
           onSelect={(key) => onSelect(key[0])}
-          className="custom-tree"
+          className="custom-tree w-full"
         />
 
         <div
@@ -178,6 +208,14 @@ function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
         open={connectModal}
         onClose={() => setConnectModal(false)}
         onConnect={handleConnect}
+      />
+
+      <CreateTable
+        open={createModal}
+        connection={connection}
+        owner={owner}
+        onCreate={handleCreate}
+        onCancel={() => setCreateModal(false)}
       />
     </div>
   );
