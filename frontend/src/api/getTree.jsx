@@ -14,7 +14,7 @@ import {
   CodeOutlined,
 } from '@ant-design/icons';
 
-export async function getTree(connections, setCreateModal,setDropTable) {
+export async function getTree(connections, setCreateModal,setDropTable, setViewModal, setDropView) {
   try {
     const allConnectionsNodes = [];
 
@@ -39,7 +39,7 @@ export async function getTree(connections, setCreateModal,setDropTable) {
           {
             title: (
               <span className="flex justify-between w-full items-center">
-                Tables
+                Tablas
                 <Dropdown
                   menu={{
                     items: [
@@ -76,7 +76,34 @@ export async function getTree(connections, setCreateModal,setDropTable) {
             })),
           },
           {
-            title: 'Views',
+            title: (
+            <span className="flex justify-between w-full items-center">
+                Vistas
+                <Dropdown
+                  menu={{
+                    items: [
+                      {
+                        key: 'create_view',
+                        label: 'Crear Vista',
+                        onClick: () => setViewModal(conn, ownerObj.owner),
+                      },
+                      {
+                        key: 'drop_table',
+                        label: 'Eliminar Vista',
+                        onClick: () => setDropView(true),
+                      },
+                    ],
+                  }}
+                  trigger={['click']}
+                >
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<MoreOutlined />}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </Dropdown>
+              </span>),
             type:'views',
             key: `owner_${conn.host}_${conn.user}_${ownerObj.owner}_views`,
             icon: <EyeOutlined className="text-red-800"/>,

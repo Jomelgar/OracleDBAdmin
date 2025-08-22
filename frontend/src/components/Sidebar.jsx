@@ -8,6 +8,7 @@ import { getTree } from '../api/getTree';
 import { useEffect, useState } from 'react';
 import ConnectionModal from '../modal/Connection';
 import CreateTable from '../modal/CreateTable';
+import CreateView from '../modal/CreateView';
 import axiosInstance from '../utils/axiosInstance';
 
 const { Sider } = Layout;
@@ -17,8 +18,10 @@ function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
   const [treeData, setTreeData] = useState([]);
   const [connectModal, setConnectModal] = useState(false);
   const [createModal,setCreateModal] = useState(false);
+  const [createView, setCreateView] = useState(false);
+  const [dropView,setDropView] = useState(false);
   const [dropModal, setDropModal] = useState(false);
-  const [siderWidth, setSiderWidth] = useState(400); // valor inicial
+  const [siderWidth, setSiderWidth] = useState(400);
   const [isResizing, setIsResizing] = useState(false);
   const [connection, setConnection] = useState(false);
   const [owner,setOwner] = useState(false);
@@ -29,9 +32,14 @@ function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
     setCreateModal(true);
   }
 
+  const selectAddView=(connection,owner)=>{
+    setConnection(connection);
+    setOwner(owner);
+    setCreateView(true);
+  }
+
 const handleCreate = async (conn, query) => {
   try {
-    console.log(query);
     const res = await axiosInstance.post('/query', {
       host: conn.host,
       user: conn.user,
@@ -40,7 +48,6 @@ const handleCreate = async (conn, query) => {
       query: query,
     });
 
-    message.success('Tabla creada correctamente');
     await fetchTree();
   } catch (error) {
     message.error('Error al crear tabla: ' + (error.response?.data?.error || error.message));
@@ -58,7 +65,7 @@ const handleCreate = async (conn, query) => {
         connections = [];
       }
     }
-    const data = await getTree(connections,selectAddTable,setDropModal);
+    const data = await getTree(connections,selectAddTable,setDropModal,selectAddView,setDropView);
     setTreeData(data);
   };
 
@@ -311,7 +318,13 @@ const handleCreate = async (conn, query) => {
         onClose={() => setConnectModal(false)}
         onConnect={handleConnect}
       />
-
+      <CreateView
+        open={createView}
+        connection={connection}
+        owner={owner}
+        onCreate={handleCreate}
+        onCancel={()=> setCreateView(false)}
+      />
       <CreateTable
         open={createModal}
         connection={connection}
