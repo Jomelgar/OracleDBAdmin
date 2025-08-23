@@ -51,7 +51,7 @@ export async function getTree(connections, setCreateModal,setDropTable, setViewM
                       {
                         key: 'drop_table',
                         label: 'Eliminar tabla',
-                        onClick: () => setDropTable(true),
+                        onClick: () => setDropTable(conn,ownerObj.owner),
                       },
                     ],
                   }}
@@ -90,7 +90,7 @@ export async function getTree(connections, setCreateModal,setDropTable, setViewM
                       {
                         key: 'drop_table',
                         label: 'Eliminar Vista',
-                        onClick: () => setDropView(true),
+                        onClick: () => setDropView(conn,ownerObj.owner),
                       },
                     ],
                   }}

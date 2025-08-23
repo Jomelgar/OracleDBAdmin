@@ -7,6 +7,8 @@ import {
 import { getTree } from '../api/getTree';
 import { useEffect, useState } from 'react';
 import ConnectionModal from '../modal/Connection';
+import DropTable from '../modal/DropTable';
+import DropView from '../modal/DropView';
 import CreateTable from '../modal/CreateTable';
 import CreateView from '../modal/CreateView';
 import axiosInstance from '../utils/axiosInstance';
@@ -38,6 +40,16 @@ function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
     setCreateView(true);
   }
 
+  const selectDeleteTable=(connection,owner)=>{
+    setConnection(connection);
+    setOwner(owner);
+    setDropModal(true);
+  }
+  const selectDeleteView=(connection,owner)=>{
+    setConnection(connection);
+    setOwner(owner);
+    setDropView(true);
+  }
 const handleCreate = async (conn, query) => {
   try {
     const res = await axiosInstance.post('/query', {
@@ -54,6 +66,41 @@ const handleCreate = async (conn, query) => {
   }
 };
 
+const handleDeleteTable = async(conn,owner,tableName) =>{
+  try {
+    const result = await axiosInstance.delete(`/table/${owner}/${tableName}`, {
+      params:
+      {
+        user: conn.user,
+        password: conn.password,
+        host: conn.host,
+        service: conn.service,
+      }
+    });
+
+    await fetchTree();
+  } catch (error) {
+    
+  }
+}
+
+const handleDeleteView = async(conn,owner,viewName) =>{
+  try {
+    const result = await axiosInstance.delete(`/view/${owner}/${viewName}`, {
+      params:
+      {
+        user: conn.user,
+        password: conn.password,
+        host: conn.host,
+        service: conn.service,
+      }
+    });
+
+    await fetchTree();
+  } catch (error) {
+    
+  }
+}
 
   const fetchTree = async () => {
     const connectionsString = Cookies.get("oracleConnections");
@@ -65,7 +112,7 @@ const handleCreate = async (conn, query) => {
         connections = [];
       }
     }
-    const data = await getTree(connections,selectAddTable,setDropModal,selectAddView,setDropView);
+    const data = await getTree(connections,selectAddTable,selectDeleteTable,selectAddView,selectDeleteView);
     setTreeData(data);
   };
 
@@ -331,6 +378,20 @@ const handleCreate = async (conn, query) => {
         owner={owner}
         onCreate={handleCreate}
         onCancel={() => setCreateModal(false)}
+      />
+      <DropTable
+        open={dropModal}
+        connection={connection}
+        owner={owner}
+        onDrop={handleDeleteTable}
+        onCancel={()=>setDropModal(false)}
+      />
+      <DropView
+        open={dropView}
+        connection={connection}
+        owner={owner}
+        onDrop={handleDeleteView}
+        onCancel={()=>setDropView(false)}
       />
     </div>
   );

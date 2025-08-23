@@ -247,3 +247,87 @@ exports.getBody = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+exports.getViewsFromOwner = async(req,res)=>{
+  const { owner } = req.params;
+  const { user, password, host, service } = req.query;
+
+  try {
+    const connection = await oracledb.getConnection({user,
+      password,
+      connectString: `${host}/${service}`,
+    });
+
+    const result = await tryExecute(
+      connection,
+      `SELECT view_name FROM dba_views WHERE owner = :owner`,
+      `SELECT view_name FROM all_views WHERE owner = :owner`,
+      [owner]
+    );
+
+    const tables = result.rows.map(r => r[0]);
+    res.status(200).json(tables);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+exports.getTablesFromOwner = async(req,res)=>{
+  const { owner } = req.params;
+  const { user, password, host, service } = req.query;
+
+  try {
+    const connection = await oracledb.getConnection({user,
+      password,
+      connectString: `${host}/${service}`,
+    });
+
+    const result = await tryExecute(
+      connection,
+      `SELECT table_name FROM dba_tables WHERE owner = :owner`,
+      `SELECT table_name FROM all_tables WHERE owner = :owner`,
+      [owner]
+    );
+
+    const tables = result.rows.map(r => r[0]);
+    res.status(200).json(tables);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+exports.dropTable = async(req,res)=>{
+  const { owner, name } = req.params;
+  const { user, password, host, service } = req.query;
+
+  try{
+    const connection = await oracledb.getConnection({user,
+      password,
+      connectString: `${host}/${service}`,
+    });
+
+    const result = connection.execute(`DROP TABLE ${owner}.${name} CASCADE CONSTRAINTS`);
+    await connection.close();
+    res.status(200).json(result);
+  }catch(e){
+    res.status(500).json({ error: error.message });
+  }
+} 
+
+exports.dropView = async(req,res)=>{
+  const { owner, name } = req.params;
+  const { user, password, host, service } = req.query;
+
+  try{
+    const connection = await oracledb.getConnection({user,
+      password,
+      connectString: `${host}/${service}`,
+    });
+
+    const result = connection.execute(`DROP VIEW ${owner}.${name}`);
+    await connection.close();
+    res.status(200).json(result);
+  }catch(e){
+    res.status(500).json({ error: error.message });
+  }
+} 
