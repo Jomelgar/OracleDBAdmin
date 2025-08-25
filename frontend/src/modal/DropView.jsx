@@ -53,15 +53,6 @@ function DropView({open,connection, owner, onDrop, onCancel}) {
   };
 
   return (
-    <div>
-      <Button
-        type="primary"
-        icon={<PlusOutlined />}
-        onClick={() => setOpen(true)}
-      >
-        Abrir Modal
-      </Button>
-
       <Modal
         title="Eliminar una vista"
         open={open}
@@ -90,7 +81,6 @@ function DropView({open,connection, owner, onDrop, onCancel}) {
           )}
         </Form>
       </Modal>
-    </div>
   );
 }
 
