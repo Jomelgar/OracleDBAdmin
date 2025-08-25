@@ -43,6 +43,7 @@ exports.getTree = async (req, res) => {
         packagesResult,
         proceduresResult,
         functionsResult,
+        tablespaceResult,
       ] = await Promise.all([
         tryExecute(
           connection,
@@ -86,6 +87,12 @@ exports.getTree = async (req, res) => {
           `SELECT object_name FROM all_objects WHERE object_type = 'FUNCTION' AND owner = :owner`,
           [owner]
         ),
+        tryExecute(
+          connection,
+          `SELECT tablespace_name FROM dba_tablespaces`,
+          `SELECT tablespace_name FROM user_tablespaces`,
+          []
+        )
       ]);
 
       result.push({
@@ -97,6 +104,7 @@ exports.getTree = async (req, res) => {
         packages: packagesResult.rows.map(r => r[0]),
         procedures: proceduresResult.rows.map(r => r[0]),
         functions: functionsResult.rows.map(r => r[0]),
+        tablespaces: tablespaceResult.rows.map(r=> r[0]),
       });
     }
 

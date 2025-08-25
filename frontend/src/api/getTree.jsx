@@ -167,6 +167,17 @@ export async function getTree(connections, setCreateModal,setDropTable, setViewM
               type:'function',
               key: `${conn.host}_${conn.user}_${ownerObj.owner}_package_${p}`,
             }))
+          },
+          {
+            title: 'Tablespaces',
+            type: 'tablespaces',
+            key: `owner_${conn.host}_${conn.user}_${ownerObj.owner}_tablespaces`,
+            icon: <CodeOutlined className="text-red-800"/>,
+            children: ownerObj.tablespaces.map((t)=>({
+              title: t,
+              type: 'tablespace',
+              key: `owner_${conn.host}_${conn.user}_${ownerObj.owner}_tablespace_${t}`,
+            })),
           }
         ],
       }));
