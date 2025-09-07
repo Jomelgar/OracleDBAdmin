@@ -2,11 +2,12 @@ import { useState } from "react";
 import { Tabs, Button, Input } from "antd";
 import EditorView from "./EditorView";
 import OutputTable from "./OutputTable";
+import DiagramView from "./DiagramView";
 
 const { TabPane } = Tabs;
 const { TextArea } = Input;
 
-function TabPanel({setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, setTabs}) {
+function TabPanel({setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, setTabs, owner, connection}) {
   const onChange = (key) => {
     setActiveKey(key);
   };
@@ -58,9 +59,12 @@ function TabPanel({setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
           <div className="p-4">
             {tab.type === "table" || tab.type==='view'? (
               <OutputTable meta={tab.meta} data={tab.content || []} />
+            ) : (tab.type === "diagram" ? (
+              <DiagramView owner={owner} connection={connection} />
             ) : (
               tab.type === "editor" ? (<EditorView/>):(<EditorView isEditable={false} content={tab.content}/>)
-            )}
+            ))
+            }
           </div>
         </TabPane>
       ))}

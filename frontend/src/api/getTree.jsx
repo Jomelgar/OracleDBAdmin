@@ -14,7 +14,7 @@ import {
   CodeOutlined,
 } from '@ant-design/icons';
 
-export async function getTree(connections, setCreateModal,setDropTable, setViewModal, setDropView) {
+export async function getTree(connections, setCreateModal,setDropTable, setViewModal, setDropView, setDiagramView) {
   try {
     const allConnectionsNodes = [];
 
@@ -31,7 +31,31 @@ export async function getTree(connections, setCreateModal,setDropTable, setViewM
       const data = res.data;
 
       const childrenOwners = data.map((ownerObj) => ({
-        title: ownerObj.owner,
+        title: ( <span className="flex justify-between w-full items-center">
+            {ownerObj.owner}
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'view_schema',
+                    label: 'Ver esquema',
+                    onClick: () => {
+                      setDiagramView(conn, ownerObj.owner); 
+                    },
+                  },
+                ],
+              }}
+              trigger={['click']}
+            >
+              <Button
+                type="text"
+                size="small"
+                icon={<MoreOutlined />}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </Dropdown>
+          </span>
+        ),
         key: `owner_${conn.host}_${conn.user}_${ownerObj.owner}`,
         icon: <FolderOutlined className="text-red-800" />,
         type:'owner',

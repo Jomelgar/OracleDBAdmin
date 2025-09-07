@@ -16,7 +16,7 @@ import axiosInstance from '../utils/axiosInstance';
 const { Sider } = Layout;
 const { Title } = Typography;
 
-function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, setTabs }) {
+function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, setTabs,owner,setOwner,connection,setConnection}) {
   const [treeData, setTreeData] = useState([]);
   const [connectModal, setConnectModal] = useState(false);
   const [createModal,setCreateModal] = useState(false);
@@ -25,8 +25,6 @@ function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
   const [dropModal, setDropModal] = useState(false);
   const [siderWidth, setSiderWidth] = useState(400);
   const [isResizing, setIsResizing] = useState(false);
-  const [connection, setConnection] = useState(false);
-  const [owner,setOwner] = useState(false);
 
   const selectAddTable= (connection,owner)=>{
     setConnection(connection);
@@ -39,6 +37,26 @@ function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
     setOwner(owner);
     setCreateView(true);
   }
+
+  const openDiagram = (conn, owner) => {
+    setConnection(conn);
+    setOwner(owner);
+    const title = `Esquema - ${owner}`;
+    const type = "diagram";
+    setTabs(prev => {
+        if (prev.some(tab => tab.title === title && tab.type === type)) {
+          return prev;
+        }
+        return [...prev, { 
+          id: String(newTabIndex), 
+          title, 
+          type, 
+          content: { conn, owner }, 
+        }];
+      });
+    setActiveKey(String(newTabIndex));
+    setNewTabIndex(idx => idx + 1);
+  };
 
   const selectDeleteTable=(connection,owner)=>{
     setConnection(connection);
@@ -112,7 +130,7 @@ const handleDeleteView = async(conn,owner,viewName) =>{
         connections = [];
       }
     }
-    const data = await getTree(connections,selectAddTable,selectDeleteTable,selectAddView,selectDeleteView);
+    const data = await getTree(connections,selectAddTable,selectDeleteTable,selectAddView,selectDeleteView,openDiagram);
     setTreeData(data);
   };
 
@@ -301,26 +319,25 @@ const handleDeleteView = async(conn,owner,viewName) =>{
     }
   }
 
-  const onSelect = async (selectedKeys, info) => {
-  
-    const node = info.node;
+const onSelect = async (selectedKeys, info) => {
+  const node = info.node;
 
-    switch (node.type) {
-      case "table":
-      case "view":
-        await openTable(node,selectedKeys);
-        break;
-      case "trigger":
-      case "procedure":
-      case "function":
-        openBody(node,selectedKeys);
-        break;
-      case "package":
-        break;
-      default:
-        break;
-    }
-  };
+  switch (node.type) {
+    case "table":
+    case "view":
+      await openTable(node, selectedKeys);
+      break;
+    case "trigger":
+    case "procedure":
+    case "function":
+      await openBody(node, selectedKeys);
+      break;
+    case "package":
+      break;
+    default:
+      break;
+  }
+};
 
 
   return (

@@ -339,3 +339,102 @@ exports.dropView = async(req,res)=>{
     res.status(500).json({ error: error.message });
   }
 } 
+
+exports.getDiagram = async (req, res) => {
+  const { host, user, password, service, owner } = req.body;
+
+  let connection;
+  try {
+    connection = await oracledb.getConnection({
+      user,
+      password,
+      connectString: `${host}/${service}`,
+    });
+
+    // Función para sanitizar nombres de tablas/columnas
+    const sanitize = (name) => name.replace(/[^a-zA-Z0-9_]/g, "_");
+    const sanitizeType = (type) => type.replace(/[^a-zA-Z0-9_]/g, "_");
+
+    // 1️⃣ Tablas filtradas por owner y excluyendo tablas de sistema
+    const tablesResult = await connection.execute(
+      `SELECT table_name FROM all_tables 
+       WHERE owner = :owner 
+         AND table_name NOT LIKE 'SYS_%' 
+         AND table_name NOT LIKE 'WRR$%' 
+         AND table_name NOT LIKE 'KU_%'
+       ORDER BY table_name`,
+      [owner.toUpperCase()]
+    );
+    const tables = tablesResult.rows.map((r) => r[0]);
+
+    // 2️⃣ Columnas por tabla
+    const tableColumns = {};
+    for (let table of tables) {
+      const cols = await connection.execute(
+        `SELECT column_name, data_type 
+         FROM all_tab_columns 
+         WHERE table_name = :t AND owner = :owner`,
+        [table, owner.toUpperCase()]
+      );
+      tableColumns[table] = cols.rows.map((r) => ({
+        name: sanitize(r[0]),
+        type: sanitizeType(r[1]),
+      }));
+    }
+
+    // 3️⃣ Relaciones (FKs) filtradas por owner
+    const relsResult = await connection.execute(
+      `SELECT a.table_name child_table,
+              c_pk.table_name parent_table
+       FROM all_cons_columns a
+       JOIN all_constraints c ON a.constraint_name = c.constraint_name AND a.owner = c.owner
+       JOIN all_cons_columns b ON c.r_constraint_name = b.constraint_name AND c.owner = b.owner
+       JOIN all_constraints c_pk ON b.constraint_name = c_pk.constraint_name AND b.owner = c_pk.owner
+       WHERE c.constraint_type = 'R'
+         AND a.owner = :owner`,
+      [owner.toUpperCase()]
+    );
+
+    const relations = relsResult.rows.map((r) => ({
+      child: sanitize(r[0]),
+      parent: sanitize(r[1]),
+    }));
+
+    // 4️⃣ Construir Mermaid
+    let mermaid = "erDiagram\n";
+    tables.forEach((table) => {
+      const safeTable = sanitize(table);
+      mermaid += `  ${safeTable} {\n`;
+      tableColumns[table].forEach((col) => {
+        mermaid += `    ${col.type} ${col.name}\n`;
+      });
+      mermaid += "  }\n";
+    });
+    relations.forEach((rel) => {
+      mermaid += `  ${rel.parent} ||--o{ ${rel.child} : "FK"\n`;
+    });
+
+    // 5️⃣ Enviar literal para frontend
+    res.json({
+      success: true,
+      mermaid,
+      tables: tables.map(sanitize),
+      columns: tableColumns,
+      relations,
+    });
+
+  } catch (err) {
+    console.error("❌ ERD Error:", err);
+    res.status(500).json({ success: false, error: err.message || err.toString() });
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (err) {
+        console.error("❌ Error closing connection:", err);
+      }
+    }
+  }
+};
+
+

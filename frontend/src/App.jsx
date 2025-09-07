@@ -4,6 +4,8 @@ import TabPanel from './components/TabPanel';
 
 function App() {
   const [tabs, setTabs] = useState([]);
+  const [owner,setOwner] = useState(false);
+  const [connection,setConnection] = useState(false);
   const [activeKey, setActiveKey] = useState("1");
   const [newTabIndex, setNewTabIndex] = useState(2);
   
@@ -18,12 +20,13 @@ function App() {
       <div className="w-screen flex bg-gray-100">
         <Sidebar 
           setActiveKey={setActiveKey} setTabs={setTabs} setNewTabIndex={setNewTabIndex}
-          activeKey={activeKey} tabs={tabs} newTabIndex={newTabIndex}
+          activeKey={activeKey} tabs={tabs} newTabIndex={newTabIndex} connection={connection} setConnection={setConnection}
+          owner={owner} setOwner={setOwner}
         />
         <div className="flex-1 flex flex-col">
           <TabPanel 
             setActiveKey={setActiveKey} setTabs={setTabs} setNewTabIndex={setNewTabIndex}
-            activeKey={activeKey} tabs={tabs} newTabIndex={newTabIndex}
+            activeKey={activeKey} tabs={tabs} newTabIndex={newTabIndex} owner={owner} connection={connection}
           />
         </div>
     </div>
