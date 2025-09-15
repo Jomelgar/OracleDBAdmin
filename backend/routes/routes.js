@@ -14,5 +14,6 @@ router.get('/data-types',dbService.getDataTypes);
 router.delete('/table/:owner/:name',dbService.dropTable);
 router.delete('/view/:owner/:name',dbService.dropView);
 router.post("/erd",dbService.getDiagram);
+router.get("/ddl/:owner/:name/:type",dbService.getDDL);
 
 module.exports = router;

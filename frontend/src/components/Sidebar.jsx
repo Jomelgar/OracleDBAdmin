@@ -319,23 +319,69 @@ const handleDeleteView = async(conn,owner,viewName) =>{
     }
   }
 
+const openDDL = async (node, selectedKeys) => {
+  const key = node.key;
+
+  try {
+    const parts = key.split("_");
+    const host = parts[0];
+    const user = parts[1];
+    const owner = parts[2];
+    const type = parts[3].replace(/s$/, ""); // table | view
+    const name = parts.slice(4).join("_");
+    const conn = JSON.parse(Cookies.get("oracleConnections") || "[]")
+      .find(c => c.host === host && c.user === user);
+
+    if (!conn) {
+      console.error("Conexión no encontrada:", host, user);
+      return;
+    }
+
+    const res = await axiosInstance.get(`/ddl/${owner}/${name}/${type}`, {
+      params: {
+        user: conn.user,
+        password: conn.password,
+        host: conn.host,
+        service: conn.service,
+      },
+    });
+
+    const ddl = res.data?.ddl || "DDL no disponible";
+
+    setTabs(prev => {
+      if (prev.some(tab => tab.title === name && tab.type === `${type}_ddl`)) {
+        return prev;
+      }
+      return [
+        ...prev,
+        {
+          id: String(newTabIndex + 1),
+          title: name + " (DDL)",
+          type: `${type}_ddl`,
+          content: ddl,
+        },
+      ];
+    });
+
+    addTableTab(name + " (DDL)");
+  } catch (error) {
+    message.error("Error cargando DDL");
+    console.error(error);
+  }
+};
+
+
 const onSelect = async (selectedKeys, info) => {
   const node = info.node;
 
   switch (node.type) {
     case "table":
     case "view":
+      await openDDL(node,selectedKeys);
       await openTable(node, selectedKeys);
       break;
-    case "trigger":
-    case "procedure":
-    case "function":
-      await openBody(node, selectedKeys);
-      break;
-    case "package":
-      break;
     default:
-      break;
+      await openDDL(node, selectedKeys);
   }
 };
 

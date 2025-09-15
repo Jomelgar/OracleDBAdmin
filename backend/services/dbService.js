@@ -59,8 +59,8 @@ exports.getTree = async (req, res) => {
         ),
         tryExecute(
           connection,
-          `SELECT table_name|| '.'|| index_name FROM dba_indexes WHERE owner = :owner`,
-          `SELECT table_name|| '.'|| index_name FROM all_indexes WHERE owner = :owner`,
+          `SELECT object_name FROM dba_objects WHERE object_type = 'INDEX' AND owner = :owner`,
+          `SELECT object_name FROM all_objects WHERE object_type = 'INDEX' AND owner = :owner`,
           [owner]
         ),
         tryExecute(
@@ -247,7 +247,7 @@ exports.getBody = async (req, res) => {
        FROM dba_source WHERE name = :name AND owner = :owner`,
       `SELECT LISTAGG(text,'') WITHIN GROUP(ORDER BY line)
        FROM all_source WHERE name = :name AND owner = :owner`,
-      [name, owner]
+      [name.toUpperCase(), owner.toUpperCase()]
     );
 
     res.status(200).json(result);
@@ -437,4 +437,106 @@ exports.getDiagram = async (req, res) => {
   }
 };
 
+exports.getDDL = async (req, res) => {
+  const { owner, name, type } = req.params;
+  const { user, password, host, service } = req.query;
 
+  const typeMap = {
+    table: "TABLE",
+    view: "VIEW",
+    index: "INDEX",
+    sequence: "SEQUENCE",
+    trigger: "TRIGGER",
+    procedure: "PROCEDURE",
+    function: "FUNCTION",
+    package: "PACKAGE",
+    package_body: "PACKAGE_BODY"
+  };
+
+  const ddlType = typeMap[type];
+  if (!ddlType) return res.status(400).json({ error: "Tipo no soportado" });
+
+  try {
+    const connection = await oracledb.getConnection({
+      user,
+      password,
+      connectString: `${host}/${service}`,
+    });
+
+    const result = await connection.execute(
+      `SELECT DBMS_METADATA.GET_DDL(:ddlType, :name, :owner) AS DDL FROM dual`,
+      { ddlType, name, owner },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    let ddl = result.rows[0].DDL;
+
+    if (ddl instanceof oracledb.Lob) {
+      ddl = await new Promise((resolve, reject) => {
+        let clobData = "";
+        ddl.setEncoding("utf8");
+        ddl.on("data", (chunk) => (clobData += chunk));
+        ddl.on("end", () => resolve(clobData));
+        ddl.on("error", reject);
+      });
+    }
+
+    await connection.close();
+
+    res.status(200).json({ ddl });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+exports.getSchemaDDL = async (req, res) => {
+  const { owner } = req.params;
+  const { user, password, host, service } = req.query;
+
+  try {
+    const connection = await oracledb.getConnection({
+      user,
+      password,
+      connectString: `${host}/${service}`,
+    });
+
+    // Traer todos los objetos
+    const result = await connection.execute(
+      `SELECT object_type, object_name
+       FROM all_objects
+       WHERE owner = :owner
+       AND object_type IN ('TABLE','VIEW','INDEX','SEQUENCE','TRIGGER','PROCEDURE','FUNCTION','PACKAGE')`,
+      [owner]
+    );
+
+    const ddls = {};
+
+    for (let row of result.rows) {
+      const [type, name] = row;
+      try {
+        const ddlResult = await connection.execute(
+          `SELECT DBMS_METADATA.GET_DDL(:type, :name, :owner) AS DDL FROM dual`,
+          [type, name, owner]
+        );
+        let ddl = ddlResult.rows[0][0];
+
+        // Transformar tipos para PostgreSQL
+        ddl = ddl.replace(/\bNUMBER\b/gi, "NUMERIC")
+                 .replace(/\bVARCHAR2\b/gi, "VARCHAR")
+                 .replace(/\bDATE\b/gi, "TIMESTAMP")
+                 .replace(/ENABLE|DISABLE/g, ""); // quitar keywords de Oracle
+        ddls[`${type}_${name}`] = ddl;
+      } catch (e) {
+        console.warn(`No se pudo generar DDL de ${type} ${name}: ${e.message}`);
+      }
+    }
+
+    await connection.close();
+    res.status(200).json(ddls);
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
