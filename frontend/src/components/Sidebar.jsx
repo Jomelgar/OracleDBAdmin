@@ -12,6 +12,7 @@ import DropView from '../modal/DropView';
 import CreateTable from '../modal/CreateTable';
 import CreateView from '../modal/CreateView';
 import axiosInstance from '../utils/axiosInstance';
+import MigrateSchema from "../modal/MigrateSchema";
 
 const { Sider } = Layout;
 const { Title } = Typography;
@@ -21,6 +22,7 @@ function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
   const [connectModal, setConnectModal] = useState(false);
   const [createModal,setCreateModal] = useState(false);
   const [createView, setCreateView] = useState(false);
+  const [migrationView,setMigrationView] = useState(false);
   const [dropView,setDropView] = useState(false);
   const [dropModal, setDropModal] = useState(false);
   const [siderWidth, setSiderWidth] = useState(400);
@@ -36,6 +38,12 @@ function Sidebar({ setActiveKey, activeKey, setNewTabIndex, newTabIndex, tabs, s
     setConnection(connection);
     setOwner(owner);
     setCreateView(true);
+  }
+
+  const openMigration=(connection,owner)=>{
+    setConnection(connection);
+    setOwner(owner);
+    setMigrationView(true);
   }
 
   const openDiagram = (conn, owner) => {
@@ -130,7 +138,7 @@ const handleDeleteView = async(conn,owner,viewName) =>{
         connections = [];
       }
     }
-    const data = await getTree(connections,selectAddTable,selectDeleteTable,selectAddView,selectDeleteView,openDiagram);
+    const data = await getTree(connections,selectAddTable,selectDeleteTable,selectAddView,selectDeleteView,openDiagram,openMigration);
     setTreeData(data);
   };
 
@@ -455,6 +463,12 @@ const onSelect = async (selectedKeys, info) => {
         owner={owner}
         onDrop={handleDeleteView}
         onCancel={()=>setDropView(false)}
+      />
+      <MigrateSchema
+        owner={owner}
+        connection={connection}
+        visible={migrationView}
+        onClose={()=>{setMigrationView(false)}}
       />
     </div>
   );

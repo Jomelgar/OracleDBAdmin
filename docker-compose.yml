@@ -13,5 +13,19 @@ services:
       - oracle-xe-data:/opt/oracle/oradata
     restart: unless-stopped
 
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: mypguser
+      POSTGRES_PASSWORD: MiPasswordPostgres123
+      POSTGRES_DB: mydb
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
 volumes:
   oracle-xe-data:
+  postgres-data:

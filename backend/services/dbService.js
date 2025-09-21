@@ -1,4 +1,5 @@
 const oracledb = require('oracledb');
+const { Client } = require("pg");
 
 async function connectToDB(config) {
   return await oracledb.getConnection(config);
@@ -490,52 +491,176 @@ exports.getDDL = async (req, res) => {
   }
 };
 
+function mapOracleTypeToPostgres(column) {
+  const { DATA_TYPE, DATA_LENGTH, DATA_PRECISION, DATA_SCALE } = column;
+  switch (DATA_TYPE) {
+    case "NUMBER":
+      if (DATA_SCALE > 0) return `NUMERIC(${DATA_PRECISION},${DATA_SCALE})`;
+      return "NUMERIC";
+    case "VARCHAR2":
+    case "NVARCHAR2":
+      return `VARCHAR(${DATA_LENGTH})`;
+    case "CHAR":
+    case "NCHAR":
+      return `CHAR(${DATA_LENGTH})`;
+    case "DATE":
+      return "TIMESTAMP";
+    case "CLOB":
+    case "NCLOB":
+      return "TEXT";
+    case "BLOB":
+      return "BYTEA";
+    default:
+      return DATA_TYPE; // por si hay otros tipos
+  }
+}
 
-exports.getSchemaDDL = async (req, res) => {
+exports.migrateSchema = async (req, res) => {
   const { owner } = req.params;
-  const { user, password, host, service } = req.query;
+  const {
+    user, password, host, service,  // Oracle
+    pgUser, pgPassword, pgHost, pgPort, pgDatabase // PostgreSQL
+  } = req.body;
 
   try {
-    const connection = await oracledb.getConnection({
+    // 🔹 Conexión Oracle
+    const oracleConn = await oracledb.getConnection({
       user,
       password,
       connectString: `${host}/${service}`,
     });
 
-    // Traer todos los objetos
-    const result = await connection.execute(
-      `SELECT object_type, object_name
-       FROM all_objects
-       WHERE owner = :owner
-       AND object_type IN ('TABLE','VIEW','INDEX','SEQUENCE','TRIGGER','PROCEDURE','FUNCTION','PACKAGE')`,
-      [owner]
+    // 🔹 Conexión PostgreSQL
+    const pgClient = new Client({
+      user: pgUser,
+      password: pgPassword,
+      host: pgHost,
+      port: pgPort || 5432,
+      database: pgDatabase,
+    });
+    await pgClient.connect();
+
+    // 🔹 Crear esquema en PostgreSQL
+    const schemaName = owner.toLowerCase();
+    await pgClient.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
+
+    const migrated = {};
+
+    // 🔹 Traer tablas
+    const tablesResult = await oracleConn.execute(
+      `SELECT table_name FROM all_tables WHERE owner = :owner`,
+      [owner],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    const ddls = {};
+    // 🔹 Traer vistas
+    const viewsResult = await oracleConn.execute(
+      `SELECT view_name, text FROM all_views WHERE owner = :owner`,
+      [owner],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
 
-    for (let row of result.rows) {
-      const [type, name] = row;
+    // 🔹 Procesar tablas
+    for (let table of tablesResult.rows) {
+      const name = table.TABLE_NAME;
       try {
-        const ddlResult = await connection.execute(
-          `SELECT DBMS_METADATA.GET_DDL(:type, :name, :owner) AS DDL FROM dual`,
-          [type, name, owner]
+        // Columnas
+        const colsResult = await oracleConn.execute(
+          `SELECT column_name, data_type, data_length, data_precision, data_scale, nullable
+           FROM all_tab_columns
+           WHERE owner = :owner AND table_name = :name
+           ORDER BY column_id`,
+          [owner, name],
+          { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
-        let ddl = ddlResult.rows[0][0];
 
-        // Transformar tipos para PostgreSQL
-        ddl = ddl.replace(/\bNUMBER\b/gi, "NUMERIC")
-                 .replace(/\bVARCHAR2\b/gi, "VARCHAR")
-                 .replace(/\bDATE\b/gi, "TIMESTAMP")
-                 .replace(/ENABLE|DISABLE/g, ""); // quitar keywords de Oracle
-        ddls[`${type}_${name}`] = ddl;
-      } catch (e) {
-        console.warn(`No se pudo generar DDL de ${type} ${name}: ${e.message}`);
+        const colDefs = colsResult.rows.map(col => {
+          const type = mapOracleTypeToPostgres(col);
+          const nullable = col.NULLABLE === "N" ? "NOT NULL" : "";
+          return `"${col.COLUMN_NAME.toLowerCase()}" ${type} ${nullable}`;
+        }).join(", ");
+
+        const createTableSQL = `CREATE TABLE "${schemaName}"."${name.toLowerCase()}" (${colDefs});`;
+        migrated[`TABLE_${name}`] = { ddl: createTableSQL, inserts: [] };
+
+        // Ejecutar CREATE TABLE
+        try { await pgClient.query(createTableSQL); } 
+        catch (err) { console.warn(`No se pudo crear tabla ${name}: ${err.message}`); }
+
+        // Traer datos y generar INSERTs
+        const dataResult = await oracleConn.execute(
+          `SELECT * FROM ${owner}.${name}`,
+          [],
+          { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+
+        const inserts = dataResult.rows.map(row => {
+          const cols = Object.keys(row).map(c => `"${c.toLowerCase()}"`).join(", ");
+          const vals = Object.values(row).map(v => {
+            if (v === null) return "NULL";
+            if (typeof v === "number") return v;
+            if (v instanceof Date) return `'${v.toISOString().replace("T", " ").replace("Z", "")}'`;
+            return `'${String(v).replace(/'/g, "''")}'`;
+          }).join(", ");
+          return `INSERT INTO "${schemaName}"."${name.toLowerCase()}" (${cols}) VALUES (${vals});`;
+        });
+
+        migrated[`TABLE_${name}`].inserts = inserts;
+
+        // Ejecutar INSERTs
+        for (let ins of inserts) {
+          try { await pgClient.query(ins); }
+          catch (err) { console.warn(`No se pudo insertar en tabla ${name}: ${err.message}`); }
+        }
+
+      } catch (err) {
+        console.warn(`Error procesando tabla ${name}: ${err.message}`);
       }
     }
+    // 🔹 Procesar vistas
+    for (let view of viewsResult.rows) {
+      const name = view.VIEW_NAME;
+      try {
+        let sql = view.TEXT;
+        if (!sql) continue; // vista vacía
 
-    await connection.close();
-    res.status(200).json(ddls);
+        // 🔹 Limpiar keywords que Postgres no soporta
+        sql = sql
+          .replace(/\bFORCE\b/gi, "")
+          .replace(/\bEDITIONABLE\b/gi, "")
+          .replace(/\bWITH\b.*?CHECK\b/gi, "") // quitar restricciones Oracle
+          .replace(/\bFROM\s+DUAL\b/gi, "");    // quitar FROM DUAL
 
+        const isConstantView = /^SELECT\s+[\d'"].*$/i.test(sql.trim());
+
+        if (isConstantView) {
+          // 🔹 Si la vista es una constante, crear tabla temporal/persistente
+          const createTableSQL = `CREATE TABLE "${schemaName}"."${name.toLowerCase()}" AS ${sql};`;
+          migrated[`VIEW_${name}`] = { ddl: createTableSQL };
+          try { 
+            await pgClient.query(createTableSQL);
+          } catch (err) {
+            console.warn(`No se pudo crear tabla de constante para vista ${name}: ${err.message}`);
+          }
+        } else {
+          // 🔹 Vista normal
+          const createViewSQL = `CREATE OR REPLACE VIEW "${schemaName}"."${name.toLowerCase()}" AS ${sql};`;
+          migrated[`VIEW_${name}`] = { ddl: createViewSQL };
+          try { 
+            await pgClient.query(createViewSQL); 
+          } catch (err) { 
+            console.warn(`No se pudo crear vista ${name}: ${err.message}`); 
+          }
+        }
+
+      } catch (err) {
+        console.warn(`Error procesando vista ${name}: ${err.message}`);
+      }
+    }
+    await oracleConn.close();
+    await pgClient.end();
+
+    res.status(200).json({ migrated, message: `Migración completada en esquema ${schemaName}` });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -14,7 +14,7 @@ import {
   CodeOutlined,
 } from '@ant-design/icons';
 
-export async function getTree(connections, setCreateModal,setDropTable, setViewModal, setDropView, setDiagramView) {
+export async function getTree(connections, setCreateModal,setDropTable, setViewModal, setDropView, setDiagramView,onOpenMigration) {
   try {
     const allConnectionsNodes = [];
 
@@ -41,6 +41,13 @@ export async function getTree(connections, setCreateModal,setDropTable, setViewM
                     label: 'Ver esquema',
                     onClick: () => {
                       setDiagramView(conn, ownerObj.owner); 
+                    },
+                  },
+                  {
+                    key: 'migrate_schema',
+                    label: 'Migrar Esquema a Postgre',
+                    onClick: () => {
+                      onOpenMigration(conn,ownerObj.owner); 
                     },
                   },
                 ],
