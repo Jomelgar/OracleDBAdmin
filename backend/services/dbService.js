@@ -352,13 +352,13 @@ exports.getDiagram = async (req, res) => {
       connectString: `${host}/${service}`,
     });
 
-    // Función para sanitizar nombres de tablas/columnas
     const sanitize = (name) => name.replace(/[^a-zA-Z0-9_]/g, "_");
     const sanitizeType = (type) => type.replace(/[^a-zA-Z0-9_]/g, "_");
 
-    // 1️⃣ Tablas filtradas por owner y excluyendo tablas de sistema
+    // 1️⃣ Tablas
     const tablesResult = await connection.execute(
-      `SELECT table_name FROM all_tables 
+      `SELECT table_name 
+       FROM all_tables 
        WHERE owner = :owner 
          AND table_name NOT LIKE 'SYS_%' 
          AND table_name NOT LIKE 'WRR$%' 
@@ -368,29 +368,57 @@ exports.getDiagram = async (req, res) => {
     );
     const tables = tablesResult.rows.map((r) => r[0]);
 
-    // 2️⃣ Columnas por tabla
+    // 2️⃣ Columnas con PK/FK
     const tableColumns = {};
     for (let table of tables) {
       const cols = await connection.execute(
-        `SELECT column_name, data_type 
-         FROM all_tab_columns 
-         WHERE table_name = :t AND owner = :owner`,
+        `SELECT c.column_name,
+                c.data_type,
+                CASE WHEN cons_pk.constraint_type = 'P' THEN 'PK' END AS pk,
+                CASE WHEN cons_fk.constraint_type = 'R' THEN 'FK' END AS fk
+           FROM all_tab_columns c
+           LEFT JOIN all_cons_columns col_pk 
+             ON col_pk.table_name = c.table_name 
+            AND col_pk.column_name = c.column_name
+            AND col_pk.owner = c.owner
+           LEFT JOIN all_constraints cons_pk 
+             ON cons_pk.constraint_name = col_pk.constraint_name
+            AND cons_pk.owner = col_pk.owner
+            AND cons_pk.constraint_type = 'P'
+           LEFT JOIN all_cons_columns col_fk 
+             ON col_fk.table_name = c.table_name 
+            AND col_fk.column_name = c.column_name
+            AND col_fk.owner = c.owner
+           LEFT JOIN all_constraints cons_fk 
+             ON cons_fk.constraint_name = col_fk.constraint_name
+            AND cons_fk.owner = col_fk.owner
+            AND cons_fk.constraint_type = 'R'
+          WHERE c.table_name = :t AND c.owner = :owner
+          ORDER BY c.column_id`,
         [table, owner.toUpperCase()]
       );
+
       tableColumns[table] = cols.rows.map((r) => ({
         name: sanitize(r[0]),
         type: sanitizeType(r[1]),
+        pk: r[2] === "PK",
+        fk: r[3] === "FK",
       }));
     }
 
-    // 3️⃣ Relaciones (FKs) filtradas por owner
+    // 3️⃣ Relaciones con columnas
     const relsResult = await connection.execute(
-      `SELECT a.table_name child_table,
-              c_pk.table_name parent_table
+      `SELECT a.table_name AS child_table,
+              a.column_name AS child_column,
+              c_pk.table_name AS parent_table,
+              b.column_name AS parent_column
        FROM all_cons_columns a
-       JOIN all_constraints c ON a.constraint_name = c.constraint_name AND a.owner = c.owner
-       JOIN all_cons_columns b ON c.r_constraint_name = b.constraint_name AND c.owner = b.owner
-       JOIN all_constraints c_pk ON b.constraint_name = c_pk.constraint_name AND b.owner = c_pk.owner
+       JOIN all_constraints c 
+         ON a.owner = c.owner AND a.constraint_name = c.constraint_name
+       JOIN all_constraints c_pk 
+         ON c.r_owner = c_pk.owner AND c.r_constraint_name = c_pk.constraint_name
+       JOIN all_cons_columns b 
+         ON b.owner = c_pk.owner AND b.constraint_name = c_pk.constraint_name AND b.position = a.position
        WHERE c.constraint_type = 'R'
          AND a.owner = :owner`,
       [owner.toUpperCase()]
@@ -398,32 +426,39 @@ exports.getDiagram = async (req, res) => {
 
     const relations = relsResult.rows.map((r) => ({
       child: sanitize(r[0]),
-      parent: sanitize(r[1]),
+      childColumn: sanitize(r[1]),
+      parent: sanitize(r[2]),
+      parentColumn: sanitize(r[3]),
     }));
 
-    // 4️⃣ Construir Mermaid
-    let mermaid = "erDiagram\n";
-    tables.forEach((table) => {
-      const safeTable = sanitize(table);
-      mermaid += `  ${safeTable} {\n`;
-      tableColumns[table].forEach((col) => {
-        mermaid += `    ${col.type} ${col.name}\n`;
-      });
-      mermaid += "  }\n";
-    });
-    relations.forEach((rel) => {
-      mermaid += `  ${rel.parent} ||--o{ ${rel.child} : "FK"\n`;
-    });
+    // 4️⃣ Nodos
+    const nodes = tables.map((table, i) => ({
+      id: sanitize(table),
+      type: "tableNode", // para TableNode
+      data: {
+        table: sanitize(table),
+        columns: tableColumns[table],
+      },
+      position: { x: (i % 5) * 280, y: Math.floor(i / 5) * 220 },
+    }));
 
-    // 5️⃣ Enviar literal para frontend
+    // 5️⃣ Edges
+    const edges = relations.map((rel, i) => ({
+      id: `e${i}`,
+      source: rel.parent,
+      target: rel.child,
+      label: `${rel.parentColumn} → ${rel.childColumn}`,
+      type: "smoothstep",
+    }));
+
+    // 6️⃣ Respuesta JSON
     res.json({
       success: true,
-      mermaid,
+      graph: { nodes, edges },
       tables: tables.map(sanitize),
       columns: tableColumns,
       relations,
     });
-
   } catch (err) {
     console.error("❌ ERD Error:", err);
     res.status(500).json({ success: false, error: err.message || err.toString() });
@@ -511,26 +546,24 @@ function mapOracleTypeToPostgres(column) {
     case "BLOB":
       return "BYTEA";
     default:
-      return DATA_TYPE; // por si hay otros tipos
+      return DATA_TYPE;
   }
 }
 
 exports.migrateSchema = async (req, res) => {
   const { owner } = req.params;
   const {
-    user, password, host, service,  // Oracle
-    pgUser, pgPassword, pgHost, pgPort, pgDatabase // PostgreSQL
+    user, password, host, service,
+    pgUser, pgPassword, pgHost, pgPort, pgDatabase
   } = req.body;
 
   try {
-    // 🔹 Conexión Oracle
     const oracleConn = await oracledb.getConnection({
       user,
       password,
       connectString: `${host}/${service}`,
     });
 
-    // 🔹 Conexión PostgreSQL
     const pgClient = new Client({
       user: pgUser,
       password: pgPassword,
@@ -540,127 +573,123 @@ exports.migrateSchema = async (req, res) => {
     });
     await pgClient.connect();
 
-    // 🔹 Crear esquema en PostgreSQL
     const schemaName = owner.toLowerCase();
     await pgClient.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
-
     const migrated = {};
 
-    // 🔹 Traer tablas
     const tablesResult = await oracleConn.execute(
       `SELECT table_name FROM all_tables WHERE owner = :owner`,
       [owner],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    // 🔹 Traer vistas
-    const viewsResult = await oracleConn.execute(
-      `SELECT view_name, text FROM all_views WHERE owner = :owner`,
+    const constraintsResult = await oracleConn.execute(
+      `SELECT 
+          cons.constraint_name, cons.constraint_type, cons.table_name, 
+          col.column_name, cons.r_constraint_name, cons.r_owner
+       FROM all_constraints cons
+       JOIN all_cons_columns col
+         ON cons.constraint_name = col.constraint_name AND cons.owner = col.owner
+       WHERE cons.owner = :owner`,
       [owner],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    // 🔹 Procesar tablas
+    //Más que todo, es el intento de saber las restricciones de las tablas
+    const constraintsByTable = {};
+    for (let row of constraintsResult.rows) {
+      const t = row.TABLE_NAME;
+      if (!constraintsByTable[t]) constraintsByTable[t] = { PK: [], FK: [] };
+      if (row.CONSTRAINT_TYPE === "P") constraintsByTable[t].PK.push(row.COLUMN_NAME);
+      if (row.CONSTRAINT_TYPE === "R") constraintsByTable[t].FK.push({
+        column: row.COLUMN_NAME,
+        referencedTable: row.R_CONSTRAINT_NAME,
+        referencedOwner: row.R_OWNER
+      });
+    }
+
+    //Crear tablas
     for (let table of tablesResult.rows) {
       const name = table.TABLE_NAME;
-      try {
-        // Columnas
-        const colsResult = await oracleConn.execute(
-          `SELECT column_name, data_type, data_length, data_precision, data_scale, nullable
-           FROM all_tab_columns
-           WHERE owner = :owner AND table_name = :name
-           ORDER BY column_id`,
-          [owner, name],
-          { outFormat: oracledb.OUT_FORMAT_OBJECT }
-        );
 
-        const colDefs = colsResult.rows.map(col => {
-          const type = mapOracleTypeToPostgres(col);
-          const nullable = col.NULLABLE === "N" ? "NOT NULL" : "";
-          return `"${col.COLUMN_NAME.toLowerCase()}" ${type} ${nullable}`;
+      const colsResult = await oracleConn.execute(
+        `SELECT column_name, data_type, data_length, data_precision, data_scale, nullable
+         FROM all_tab_columns
+         WHERE owner = :owner AND table_name = :name
+         ORDER BY column_id`,
+        [owner, name],
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+
+      const colDefs = colsResult.rows.map(col => {
+        const type = mapOracleTypeToPostgres(col);
+        const nullable = col.NULLABLE === "N" ? "NOT NULL" : "";
+        return `"${col.COLUMN_NAME.toLowerCase()}" ${type} ${nullable}`;
+      }).join(", ");
+
+      const createTableSQL = `CREATE TABLE "${schemaName}"."${name.toLowerCase()}" (${colDefs});`;
+      migrated[`TABLE_${name}`] = { ddl: createTableSQL, inserts: [] };
+
+      try { await pgClient.query(createTableSQL); } 
+      catch (err) { console.warn(`No se pudo crear tabla ${name}: ${err.message}`); }
+    }
+
+    //Insertar datos
+    for (let table of tablesResult.rows) {
+      const name = table.TABLE_NAME;
+      const dataResult = await oracleConn.execute(
+        `SELECT * FROM ${owner}.${name}`,
+        [],
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+
+      const inserts = dataResult.rows.map(row => {
+        const cols = Object.keys(row).map(c => `"${c.toLowerCase()}"`).join(", ");
+        const vals = Object.values(row).map(v => {
+          if (v === null) return "NULL";
+          if (typeof v === "number") return v;
+          if (v instanceof Date) return `'${v.toISOString().replace("T", " ").replace("Z", "")}'`;
+          return `'${String(v).replace(/'/g, "''")}'`;
         }).join(", ");
+        return `INSERT INTO "${schemaName}"."${name.toLowerCase()}" (${cols}) VALUES (${vals});`;
+      });
 
-        const createTableSQL = `CREATE TABLE "${schemaName}"."${name.toLowerCase()}" (${colDefs});`;
-        migrated[`TABLE_${name}`] = { ddl: createTableSQL, inserts: [] };
-
-        // Ejecutar CREATE TABLE
-        try { await pgClient.query(createTableSQL); } 
-        catch (err) { console.warn(`No se pudo crear tabla ${name}: ${err.message}`); }
-
-        // Traer datos y generar INSERTs
-        const dataResult = await oracleConn.execute(
-          `SELECT * FROM ${owner}.${name}`,
-          [],
-          { outFormat: oracledb.OUT_FORMAT_OBJECT }
-        );
-
-        const inserts = dataResult.rows.map(row => {
-          const cols = Object.keys(row).map(c => `"${c.toLowerCase()}"`).join(", ");
-          const vals = Object.values(row).map(v => {
-            if (v === null) return "NULL";
-            if (typeof v === "number") return v;
-            if (v instanceof Date) return `'${v.toISOString().replace("T", " ").replace("Z", "")}'`;
-            return `'${String(v).replace(/'/g, "''")}'`;
-          }).join(", ");
-          return `INSERT INTO "${schemaName}"."${name.toLowerCase()}" (${cols}) VALUES (${vals});`;
-        });
-
-        migrated[`TABLE_${name}`].inserts = inserts;
-
-        // Ejecutar INSERTs
-        for (let ins of inserts) {
-          try { await pgClient.query(ins); }
-          catch (err) { console.warn(`No se pudo insertar en tabla ${name}: ${err.message}`); }
-        }
-
-      } catch (err) {
-        console.warn(`Error procesando tabla ${name}: ${err.message}`);
+      migrated[`TABLE_${name}`].inserts = inserts;
+      for (let ins of inserts) {
+        try { await pgClient.query(ins); }
+        catch (err) { console.warn(`No se pudo insertar en tabla ${name}: ${err.message}`); }
       }
     }
-    // 🔹 Procesar vistas
-    for (let view of viewsResult.rows) {
-      const name = view.VIEW_NAME;
-      try {
-        let sql = view.TEXT;
-        if (!sql) continue; // vista vacía
 
-        // 🔹 Limpiar keywords que Postgres no soporta
-        sql = sql
-          .replace(/\bFORCE\b/gi, "")
-          .replace(/\bEDITIONABLE\b/gi, "")
-          .replace(/\bWITH\b.*?CHECK\b/gi, "") // quitar restricciones Oracle
-          .replace(/\bFROM\s+DUAL\b/gi, "");    // quitar FROM DUAL
-
-        const isConstantView = /^SELECT\s+[\d'"].*$/i.test(sql.trim());
-
-        if (isConstantView) {
-          // 🔹 Si la vista es una constante, crear tabla temporal/persistente
-          const createTableSQL = `CREATE TABLE "${schemaName}"."${name.toLowerCase()}" AS ${sql};`;
-          migrated[`VIEW_${name}`] = { ddl: createTableSQL };
-          try { 
-            await pgClient.query(createTableSQL);
-          } catch (err) {
-            console.warn(`No se pudo crear tabla de constante para vista ${name}: ${err.message}`);
-          }
-        } else {
-          // 🔹 Vista normal
-          const createViewSQL = `CREATE OR REPLACE VIEW "${schemaName}"."${name.toLowerCase()}" AS ${sql};`;
-          migrated[`VIEW_${name}`] = { ddl: createViewSQL };
-          try { 
-            await pgClient.query(createViewSQL); 
-          } catch (err) { 
-            console.warn(`No se pudo crear vista ${name}: ${err.message}`); 
-          }
-        }
-
-      } catch (err) {
-        console.warn(`Error procesando vista ${name}: ${err.message}`);
+    //Crea las PK's
+    for (let tableName in constraintsByTable) {
+      const pkCols = constraintsByTable[tableName].PK;
+      if (pkCols.length) {
+        const sql = `ALTER TABLE "${schemaName}"."${tableName.toLowerCase()}" 
+                     ADD PRIMARY KEY (${pkCols.map(c => `"${c.toLowerCase()}"`).join(", ")});`;
+        try { await pgClient.query(sql); } 
+        catch (err) { console.warn(`No se pudo crear PK en ${tableName}: ${err.message}`); }
       }
     }
+
+    //Por último, mete las FK's
+    for (let tableName in constraintsByTable) {
+      for (let fk of constraintsByTable[tableName].FK) {
+        const refConstraint = constraintsResult.rows.find(r => r.CONSTRAINT_NAME === fk.referencedTable);
+        if (!refConstraint) continue;
+        const refTable = refConstraint.TABLE_NAME;
+        const sql = `ALTER TABLE "${schemaName}"."${tableName.toLowerCase()}"
+                     ADD FOREIGN KEY ("${fk.column.toLowerCase()}") 
+                     REFERENCES "${schemaName}"."${refTable.toLowerCase()}";`;
+        try { await pgClient.query(sql); } 
+        catch (err) { console.warn(`No se pudo crear FK en ${tableName}: ${err.message}`); }
+      }
+    }
+
     await oracleConn.close();
     await pgClient.end();
-
     res.status(200).json({ migrated, message: `Migración completada en esquema ${schemaName}` });
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { Card, Spin, message } from "antd";
-import MermaidDiagram from "./MermaidDiagram";
 import axiosInstance from "../utils/axiosInstance";
+import GraphDiagram from "./GraphDiagram";
 
 function DiagramView({ owner, connection }) {
-  const [chart, setChart] = useState("");
+  const [tables, setTables] = useState([]);
+  const [columns, setColumns] = useState({});
+  const [relations, setRelations] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  console.log(connection);
 
   const fetchDiagram = async () => {
     try {
@@ -19,9 +19,13 @@ function DiagramView({ owner, connection }) {
         service: connection.service,
         owner: owner,
       });
-      
-      if (res.data?.mermaid) {
-        setChart(res.data.mermaid);
+
+      console.log("📦 Datos recibidos:", res.data);
+
+      if (res.data?.tables && res.data?.columns) {
+        setTables(res.data.tables);
+        setColumns(res.data.columns);
+        setRelations(res.data.relations || []);
       } else {
         message.error("No se pudo generar el diagrama");
       }
@@ -48,7 +52,13 @@ function DiagramView({ owner, connection }) {
           <Spin size="large" />
         </div>
       ) : (
-        <MermaidDiagram chart={chart} />
+        <div style={{ width: "100%", height: "600px" }}>
+          <GraphDiagram
+            tables={tables}
+            columns={columns}
+            relations={relations}
+          />
+        </div>
       )}
     </Card>
   );
