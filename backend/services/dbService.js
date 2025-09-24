@@ -355,8 +355,15 @@ exports.getDiagram = async (req, res) => {
     const sanitize = (name) => name.replace(/[^a-zA-Z0-9_]/g, "_");
     const sanitizeType = (type) => type.replace(/[^a-zA-Z0-9_]/g, "_");
 
-    // 1️⃣ Tablas
-    const tablesResult = await connection.execute(
+    const tablesResult = await tryExecute(
+      connection,
+      `SELECT table_name 
+       FROM dba_tables 
+       WHERE owner = :owner 
+         AND table_name NOT LIKE 'SYS_%' 
+         AND table_name NOT LIKE 'WRR$%' 
+         AND table_name NOT LIKE 'KU_%'
+       ORDER BY table_name`,
       `SELECT table_name 
        FROM all_tables 
        WHERE owner = :owner 
@@ -368,10 +375,33 @@ exports.getDiagram = async (req, res) => {
     );
     const tables = tablesResult.rows.map((r) => r[0]);
 
-    // 2️⃣ Columnas con PK/FK
     const tableColumns = {};
     for (let table of tables) {
-      const cols = await connection.execute(
+      const cols = await tryExecute(
+        connection,
+        `SELECT c.column_name,
+                c.data_type,
+                CASE WHEN cons_pk.constraint_type = 'P' THEN 'PK' END AS pk,
+                CASE WHEN cons_fk.constraint_type = 'R' THEN 'FK' END AS fk
+           FROM dba_tab_columns c
+           LEFT JOIN dba_cons_columns col_pk 
+             ON col_pk.table_name = c.table_name 
+            AND col_pk.column_name = c.column_name
+            AND col_pk.owner = c.owner
+           LEFT JOIN dba_constraints cons_pk 
+             ON cons_pk.constraint_name = col_pk.constraint_name
+            AND cons_pk.owner = col_pk.owner
+            AND cons_pk.constraint_type = 'P'
+           LEFT JOIN dba_cons_columns col_fk 
+             ON col_fk.table_name = c.table_name 
+            AND col_fk.column_name = c.column_name
+            AND col_fk.owner = c.owner
+           LEFT JOIN dba_constraints cons_fk 
+             ON cons_fk.constraint_name = col_fk.constraint_name
+            AND cons_fk.owner = col_fk.owner
+            AND cons_fk.constraint_type = 'R'
+          WHERE c.table_name = :t AND c.owner = :owner
+          ORDER BY c.column_id`,
         `SELECT c.column_name,
                 c.data_type,
                 CASE WHEN cons_pk.constraint_type = 'P' THEN 'PK' END AS pk,
@@ -406,8 +436,21 @@ exports.getDiagram = async (req, res) => {
       }));
     }
 
-    // 3️⃣ Relaciones con columnas
-    const relsResult = await connection.execute(
+      const relsResult = await tryExecute(
+      connection,
+      `SELECT a.table_name AS child_table,
+              a.column_name AS child_column,
+              c_pk.table_name AS parent_table,
+              b.column_name AS parent_column
+       FROM dba_cons_columns a
+       JOIN dba_constraints c 
+         ON a.owner = c.owner AND a.constraint_name = c.constraint_name
+       JOIN dba_constraints c_pk 
+         ON c.r_owner = c_pk.owner AND c.r_constraint_name = c_pk.constraint_name
+       JOIN dba_cons_columns b 
+         ON b.owner = c_pk.owner AND b.constraint_name = c_pk.constraint_name AND b.position = a.position
+       WHERE c.constraint_type = 'R'
+         AND a.owner = :owner`,
       `SELECT a.table_name AS child_table,
               a.column_name AS child_column,
               c_pk.table_name AS parent_table,
@@ -431,43 +474,21 @@ exports.getDiagram = async (req, res) => {
       parentColumn: sanitize(r[3]),
     }));
 
-    // 4️⃣ Nodos
-    const nodes = tables.map((table, i) => ({
-      id: sanitize(table),
-      type: "tableNode", // para TableNode
-      data: {
-        table: sanitize(table),
-        columns: tableColumns[table],
-      },
-      position: { x: (i % 5) * 280, y: Math.floor(i / 5) * 220 },
-    }));
-
-    // 5️⃣ Edges
-    const edges = relations.map((rel, i) => ({
-      id: `e${i}`,
-      source: rel.parent,
-      target: rel.child,
-      label: `${rel.parentColumn} → ${rel.childColumn}`,
-      type: "smoothstep",
-    }));
-
-    // 6️⃣ Respuesta JSON
     res.json({
       success: true,
-      graph: { nodes, edges },
       tables: tables.map(sanitize),
       columns: tableColumns,
       relations,
     });
   } catch (err) {
-    console.error("❌ ERD Error:", err);
+    console.error("ERD Error:", err);
     res.status(500).json({ success: false, error: err.message || err.toString() });
   } finally {
     if (connection) {
       try {
         await connection.close();
       } catch (err) {
-        console.error("❌ Error closing connection:", err);
+        console.error("Error closing connection:", err);
       }
     }
   }
@@ -685,6 +706,34 @@ exports.migrateSchema = async (req, res) => {
         catch (err) { console.warn(`No se pudo crear FK en ${tableName}: ${err.message}`); }
       }
     }
+
+    //Me lo moche haciendo los cambios de las PKs y FKs
+    const viewsResult = await oracleConn.execute(
+      `SELECT view_name, text
+         FROM all_views
+        WHERE owner = :owner`,
+      [owner],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    for (let view of viewsResult.rows) {
+      const name = view.VIEW_NAME;
+      let sql = view.TEXT;
+
+      if (!sql) continue;
+      sql = sql
+        .replace(/\bFROM\s+dual\b/gi, "");
+
+      const createViewSQL = `CREATE OR REPLACE VIEW "${schemaName}"."${name.toLowerCase()}" AS ${sql}`;
+      migrated[`VIEW_${name}`] = { ddl: createViewSQL };
+
+      try { 
+        await pgClient.query(createViewSQL); 
+      } catch (err) { 
+        console.warn(`No se pudo crear vista ${name}: ${err.message}`); 
+      }
+    }
+
 
     await oracleConn.close();
     await pgClient.end();
