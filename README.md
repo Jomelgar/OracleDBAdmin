@@ -4,6 +4,7 @@ Administrador web de bases de datos **Oracle Express**, desarrollado con **Node.
 
 Este proyecto busca replicar la experiencia de herramientas como **DBeaver** o **BeeKeeper**, pero construido de forma didáctica con un stack moderno y portable usando **Docker**.
 
+Se **realizo** todo lo que pidio, diagrama, sincronización, y todo lo del parcial anterior como avance.
 ---
 
 ## 📚 Índice
